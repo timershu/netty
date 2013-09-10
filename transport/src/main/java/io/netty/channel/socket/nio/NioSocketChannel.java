@@ -16,6 +16,7 @@
 package io.netty.channel.socket.nio;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelFuture;
@@ -226,8 +227,10 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         for (;;) {
             // Do non-gathering write for a single buffer case.
+            // This is only done for non CompositeByteBufs as those will typically use more then one
+            // ByteBuf internally.
             final int msgCount = in.size();
-            if (msgCount <= 1) {
+            if (msgCount <= 1 && !(in.current() instanceof CompositeByteBuf)) {
                 super.doWrite(in);
                 return;
             }

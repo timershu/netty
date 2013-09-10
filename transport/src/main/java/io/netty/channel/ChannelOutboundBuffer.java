@@ -22,6 +22,7 @@ package io.netty.channel;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.Recycler;
 import io.netty.util.Recycler.Handle;
@@ -319,6 +320,7 @@ public final class ChannelOutboundBuffer {
         int nioBufferCount = 0;
         final int mask = buffer.length - 1;
         final ByteBufAllocator alloc = channel.alloc();
+        boolean directBuffersPooled = alloc.isDirectBufferPooled();
         ByteBuffer[] nioBuffers = this.nioBuffers;
         Object m;
         int i = flushed;
@@ -339,15 +341,24 @@ public final class ChannelOutboundBuffer {
                 if (nioBufferCount + count > nioBuffers.length) {
                     this.nioBuffers = nioBuffers = doubleNioBufferArray(nioBuffers, nioBufferCount);
                 }
-                if (buf.isDirect() || !alloc.isDirectBufferPooled()) {
+                if (buf.isDirect() || !directBuffersPooled) {
                     if (buf.nioBufferCount() == 1) {
                         nioBuffers[nioBufferCount ++] = buf.internalNioBuffer(readerIndex, readableBytes);
                     } else {
                         nioBufferCount = fillBufferArray(buf, nioBuffers, nioBufferCount);
                     }
                 } else {
-                    nioBufferCount = fillBufferArrayNonDirect(buffer[i], buf, readerIndex,
-                            readableBytes, alloc, nioBuffers, nioBufferCount);
+                    // check if we handle a CompositeByteBuf and direct buffers are pooled. If so we can update the
+                    // components in the CompositeByteBuf with direct ByteBufs if needed and include them for gathering
+                    // writes.
+                    if (directBuffersPooled && buf instanceof CompositeByteBuf) {
+                        CompositeByteBuf compositeByteBuf = (CompositeByteBuf) buf;
+                        updateCompositeByteBuf(compositeByteBuf, alloc);
+                        nioBufferCount = fillBufferArray(buf, nioBuffers, nioBufferCount);
+                    } else {
+                        nioBufferCount = fillBufferArrayNonDirect(buffer[i], buf, readerIndex,
+                                readableBytes, alloc, nioBuffers, nioBufferCount);
+                    }
                 }
             }
             i = i + 1 & mask;
@@ -356,6 +367,26 @@ public final class ChannelOutboundBuffer {
         this.nioBufferSize = nioBufferSize;
 
         return nioBuffers;
+    }
+
+    private static void updateCompositeByteBuf(CompositeByteBuf compositeByteBuf, ByteBufAllocator alloc) {
+        int num = compositeByteBuf.numComponents();
+        for (int i = 0; i < num; i++) {
+            ByteBuf b = compositeByteBuf.component(i);
+            if (b.isReadable() && !b.isDirect()) {
+                ByteBuf direct = alloc.directBuffer(b.readableBytes()).writeBytes(b);
+
+                try {
+                    // remove the component which will also release the buffer
+                    compositeByteBuf.removeComponent(i);
+                } catch (Throwable cause) {
+                    logger.warn("Failed to release a message.", cause);
+                }
+                // add the new buffer which is now a direct one. There is no need to adjust the writerIndex,
+                // as the added buffer is the same size as the removed.
+                compositeByteBuf.addComponent(i, direct);
+            }
+        }
     }
 
     private static int fillBufferArray(ByteBuf buf, ByteBuffer[] nioBuffers, int nioBufferCount) {
@@ -375,9 +406,6 @@ public final class ChannelOutboundBuffer {
         directBuf.writeBytes(buf, readerIndex, readableBytes);
         buf.release();
         entry.msg = directBuf;
-        if (nioBufferCount == nioBuffers.length) {
-            nioBuffers = doubleNioBufferArray(nioBuffers, nioBufferCount);
-        }
         nioBuffers[nioBufferCount ++] = directBuf.internalNioBuffer(0, readableBytes);
         return nioBufferCount;
     }
