@@ -150,9 +150,9 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     public ByteBuf getBytes(int index, ByteBuffer dst) {
         checkIndex(index);
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = memory.duplicate();
         index = idx(index);
-        tmpBuf.clear().position(index).limit(index + bytesToCopy);
+        tmpBuf.position(index).limit(index + bytesToCopy);
         dst.put(tmpBuf);
         return this;
     }
@@ -175,7 +175,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
             return 0;
         }
 
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = memory.duplicate();
         index = idx(index);
         tmpBuf.clear().position(index).limit(index + length);
         return out.write(tmpBuf);

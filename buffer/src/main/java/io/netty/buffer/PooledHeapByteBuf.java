@@ -129,7 +129,7 @@ final class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
     public int getBytes(int index, GatheringByteChannel out, int length) throws IOException {
         checkIndex(index, length);
         index = idx(index);
-        return out.write((ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length));
+        return out.write((ByteBuffer) newInternalNioBuffer(memory).position(index).limit(index + length));
     }
 
     @Override
