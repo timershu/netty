@@ -102,9 +102,9 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     @Override
     public ByteBuf getBytes(int index, byte[] dst, int dstIndex, int length) {
         checkDstIndex(index, length, dstIndex, dst.length);
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = memory.duplicate();
         index = idx(index);
-        tmpBuf.clear().position(index).limit(index + length);
+        tmpBuf.position(index).limit(index + length);
         tmpBuf.get(dst, dstIndex, length);
         return this;
     }
@@ -113,9 +113,9 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     public ByteBuf getBytes(int index, ByteBuffer dst) {
         checkIndex(index);
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = memory.duplicate();
         index = idx(index);
-        tmpBuf.clear().position(index).limit(index + bytesToCopy);
+        tmpBuf.position(index).limit(index + bytesToCopy);
         dst.put(tmpBuf);
         return this;
     }
@@ -128,8 +128,8 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         }
 
         byte[] tmp = new byte[length];
-        ByteBuffer tmpBuf = internalNioBuffer();
-        tmpBuf.clear().position(idx(index));
+        ByteBuffer tmpBuf = memory.duplicate();
+        tmpBuf.position(idx(index));
         tmpBuf.get(tmp);
         out.write(tmp);
         return this;
@@ -142,9 +142,9 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
             return 0;
         }
 
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = memory.duplicate();
         index = idx(index);
-        tmpBuf.clear().position(index).limit(index + length);
+        tmpBuf.position(index).limit(index + length);
         return out.write(tmpBuf);
     }
 
