@@ -193,6 +193,7 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public int getBytes(int index, GatheringByteChannel out, int length) throws IOException {
+        checkReadableBytes(length);
         ensureAccessible();
         return out.write(ByteBuffer.wrap(array, index, length));
     }
