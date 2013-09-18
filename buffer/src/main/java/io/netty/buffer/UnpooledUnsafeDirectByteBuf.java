@@ -376,9 +376,24 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
             return 0;
         }
 
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = buffer.duplicate();
         tmpBuf.clear().position(index).limit(index + length);
         return out.write(tmpBuf);
+    }
+
+    @Override
+    public int readBytes(GatheringByteChannel out, int length) throws IOException {
+        checkReadableBytes(length);
+        ensureAccessible();
+        if (length == 0) {
+            return 0;
+        }
+        int index = readerIndex();
+        ByteBuffer tmpBuf = internalNioBuffer();
+        tmpBuf.position(index).limit(index + length);
+        int written = out.write(tmpBuf);
+        readerIndex += written;
+        return written;
     }
 
     @Override

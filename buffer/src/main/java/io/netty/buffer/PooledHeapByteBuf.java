@@ -133,6 +133,17 @@ final class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
     }
 
     @Override
+    public int readBytes(GatheringByteChannel out, int length) throws IOException {
+        checkReadableBytes(length);
+        int readerIndex = readerIndex();
+        int index = idx(readerIndex);
+        int readBytes = out.write((ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length));
+        readerIndex += readBytes;
+        this.readerIndex = readerIndex;
+        return readBytes;
+    }
+
+    @Override
     protected void _setByte(int index, int value) {
         memory[idx(index)] = (byte) value;
     }
