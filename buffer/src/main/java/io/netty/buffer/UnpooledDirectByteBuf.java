@@ -281,9 +281,27 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
                     "dstIndex: %d, length: %d (expected: range(0, %d))", dstIndex, length, dst.length));
         }
 
+        ByteBuffer tmpBuf = buffer.duplicate();
+        tmpBuf.clear().position(index).limit(index + length);
+        tmpBuf.get(dst, dstIndex, length);
+        return this;
+    }
+
+    @Override
+    public ByteBuf readBytes(byte[] dst, int dstIndex, int length) {
+        checkReadableBytes(length);
+        int index = readerIndex();
+        checkDstIndex(index, length, dstIndex, dst.length);
+
+        if (dstIndex < 0 || dstIndex > dst.length - length) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "dstIndex: %d, length: %d (expected: range(0, %d))", dstIndex, length, dst.length));
+        }
+
         ByteBuffer tmpBuf = internalNioBuffer();
         tmpBuf.clear().position(index).limit(index + length);
         tmpBuf.get(dst, dstIndex, length);
+        readerIndex += length;
         return this;
     }
 
@@ -295,9 +313,24 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
+        ByteBuffer tmpBuf = buffer.duplicate();
+        tmpBuf.position(index).limit(index + bytesToCopy);
+        dst.put(tmpBuf);
+        return this;
+    }
+
+    @Override
+    public ByteBuf readBytes(ByteBuffer dst) {
+        int length = dst.remaining();
+        checkReadableBytes(length);
+        int index = readerIndex();
+        checkIndex(index);
+
+        int bytesToCopy = Math.min(capacity() - index, length);
         ByteBuffer tmpBuf = internalNioBuffer();
         tmpBuf.clear().position(index).limit(index + bytesToCopy);
         dst.put(tmpBuf);
+        readerIndex += length;
         return this;
     }
 
@@ -413,11 +446,33 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             out.write(buffer.array(), index + buffer.arrayOffset(), length);
         } else {
             byte[] tmp = new byte[length];
+            ByteBuffer tmpBuf = buffer.duplicate();
+            tmpBuf.position(index);
+            tmpBuf.get(tmp);
+            out.write(tmp);
+        }
+        return this;
+    }
+
+    @Override
+    public ByteBuf readBytes(OutputStream out, int length) throws IOException {
+        checkReadableBytes(length);
+        ensureAccessible();
+        if (length == 0) {
+            return this;
+        }
+
+        int index = readerIndex();
+        if (buffer.hasArray()) {
+            out.write(buffer.array(), index + buffer.arrayOffset(), length);
+        } else {
+            byte[] tmp = new byte[length];
             ByteBuffer tmpBuf = internalNioBuffer();
             tmpBuf.clear().position(index);
             tmpBuf.get(tmp);
             out.write(tmp);
         }
+        readerIndex += length;
         return this;
     }
 
@@ -428,9 +483,25 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             return 0;
         }
 
+        ByteBuffer tmpBuf = buffer.duplicate();
+        tmpBuf.position(index).limit(index + length);
+        return out.write(tmpBuf);
+    }
+
+    @Override
+    public int readBytes(GatheringByteChannel out, int length) throws IOException {
+        checkReadableBytes(length);
+        ensureAccessible();
+        if (length == 0) {
+            return 0;
+        }
+
+        int index = readerIndex();
         ByteBuffer tmpBuf = internalNioBuffer();
         tmpBuf.clear().position(index).limit(index + length);
-        return out.write(tmpBuf);
+        int written = out.write(tmpBuf);
+        readerIndex += written;
+        return written;
     }
 
     @Override
@@ -478,7 +549,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         ensureAccessible();
         ByteBuffer src;
         try {
-            src = (ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length);
+            src = (ByteBuffer) buffer.duplicate().position(index).limit(index + length);
         } catch (IllegalArgumentException e) {
             throw new IndexOutOfBoundsException("Too many bytes to read - Need " + (index + length));
         }

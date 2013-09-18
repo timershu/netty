@@ -280,9 +280,24 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
         }
 
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
+        ByteBuffer tmpBuf = buffer.duplicate();
+        tmpBuf.position(index).limit(index + bytesToCopy);
+        dst.put(tmpBuf);
+        return this;
+    }
+
+    @Override
+    public ByteBuf readBytes(ByteBuffer dst) {
+        int length = dst.remaining();
+        checkReadableBytes(length);
+        int index = readerIndex();
+        checkIndex(index);
+
+        int bytesToCopy = Math.min(capacity() - index, length);
         ByteBuffer tmpBuf = internalNioBuffer();
         tmpBuf.clear().position(index).limit(index + bytesToCopy);
         dst.put(tmpBuf);
+        readerIndex += length;
         return this;
     }
 
@@ -377,7 +392,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
         }
 
         ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.clear().position(index).limit(index + length);
+        tmpBuf.position(index).limit(index + length);
         return out.write(tmpBuf);
     }
 
@@ -390,7 +405,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
         }
         int index = readerIndex();
         ByteBuffer tmpBuf = internalNioBuffer();
-        tmpBuf.position(index).limit(index + length);
+        tmpBuf.clear().position(index).limit(index + length);
         int written = out.write(tmpBuf);
         readerIndex += written;
         return written;
