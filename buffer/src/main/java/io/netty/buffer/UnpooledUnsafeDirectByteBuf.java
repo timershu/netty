@@ -462,10 +462,10 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
 
     private ByteBuffer internalNioBuffer() {
         ByteBuffer tmpNioBuf = this.tmpNioBuf;
-        if (tmpNioBuf == null) {
+        /*if (tmpNioBuf == null) {
             this.tmpNioBuf = tmpNioBuf = buffer.duplicate();
-        }
-        return tmpNioBuf;
+        }*/
+        return buffer.duplicate();
     }
 
     @Override
