@@ -344,7 +344,7 @@ public final class ChannelOutboundBuffer {
                         if (nioBufferCount == nioBuffers.length) {
                             this.nioBuffers = nioBuffers = doubleNioBufferArray(nioBuffers, nioBufferCount);
                         }
-                        nioBuffers[nioBufferCount ++] = buf.internalNioBuffer(readerIndex, readableBytes);
+                        nioBuffers[nioBufferCount ++] = buf.nioBuffer(readerIndex, readableBytes);
                     } else {
                         ByteBuffer[] nioBufs = buf.nioBuffers();
                         if (nioBufferCount + nioBufs.length > nioBuffers.length) {
@@ -365,7 +365,7 @@ public final class ChannelOutboundBuffer {
                     if (nioBufferCount == nioBuffers.length) {
                         nioBuffers = doubleNioBufferArray(nioBuffers, nioBufferCount);
                     }
-                    nioBuffers[nioBufferCount ++] = directBuf.internalNioBuffer(0, readableBytes);
+                    nioBuffers[nioBufferCount ++] = directBuf.nioBuffer(0, readableBytes);
                 }
             }
 
