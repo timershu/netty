@@ -282,7 +282,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.clear().position(index).limit(index + length);
+        tmpBuf.position(index).limit(index + length);
         tmpBuf.get(dst, dstIndex, length);
         return this;
     }
@@ -568,11 +568,11 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     private ByteBuffer internalNioBuffer() {
-        ByteBuffer tmpNioBuf = this.tmpNioBuf;
+        /*ByteBuffer tmpNioBuf = this.tmpNioBuf;
         if (tmpNioBuf == null) {
             this.tmpNioBuf = tmpNioBuf = buffer.duplicate();
-        }
-        return tmpNioBuf;
+        }*/
+        return buffer.duplicate();
     }
 
     @Override
