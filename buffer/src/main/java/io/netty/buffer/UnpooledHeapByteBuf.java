@@ -421,11 +421,11 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     private ByteBuffer internalNioBuffer() {
-        ByteBuffer tmpNioBuf = this.tmpNioBuf;
+        /*ByteBuffer tmpNioBuf = this.tmpNioBuf;
         if (tmpNioBuf == null) {
             this.tmpNioBuf = tmpNioBuf = ByteBuffer.wrap(array);
-        }
-        return tmpNioBuf;
+        }*/
+        return ByteBuffer.wrap(array);
     }
 
     @Override
