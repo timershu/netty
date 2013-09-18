@@ -41,7 +41,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
 
     private long memoryAddress;
     private ByteBuffer buffer;
-    private ByteBuffer tmpNioBuf;
+    //private ByteBuffer tmpNioBuf;
     private int capacity;
     private boolean doNotFree;
 
@@ -117,7 +117,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
 
         this.buffer = buffer;
         memoryAddress = PlatformDependent.directBufferAddress(buffer);
-        tmpNioBuf = null;
+        //tmpNioBuf = null;
         capacity = buffer.remaining();
     }
 
@@ -461,7 +461,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
     }
 
     private ByteBuffer internalNioBuffer() {
-        ByteBuffer tmpNioBuf = this.tmpNioBuf;
+        //ByteBuffer tmpNioBuf = this.tmpNioBuf;
         /*if (tmpNioBuf == null) {
             this.tmpNioBuf = tmpNioBuf = buffer.duplicate();
         }*/

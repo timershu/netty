@@ -38,7 +38,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
     private final ByteBufAllocator alloc;
 
     private ByteBuffer buffer;
-    private ByteBuffer tmpNioBuf;
+    //private ByteBuffer tmpNioBuf;
     private int capacity;
     private boolean doNotFree;
 
@@ -113,7 +113,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         this.buffer = buffer;
-        tmpNioBuf = null;
+        //tmpNioBuf = null;
         capacity = buffer.remaining();
     }
 
