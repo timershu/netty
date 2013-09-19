@@ -203,7 +203,7 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         checkReadableBytes(length);
         ensureAccessible();
         int index = readerIndex();
-        int written = out.write((ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length));
+        int written = out.write(internalNioBuffer(index, length));
         readerIndex += written;
         return written;
     }
@@ -245,7 +245,7 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
     public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
         ensureAccessible();
         try {
-            return in.read((ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length));
+            return in.read(internalNioBuffer(index, length));
         } catch (ClosedChannelException e) {
             return -1;
         }
@@ -269,7 +269,11 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public ByteBuffer internalNioBuffer(int index, int length) {
-        return (ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length);
+        ByteBuffer tmpNioBuf = this.tmpNioBuf;
+        if (tmpNioBuf == null) {
+            this.tmpNioBuf = tmpNioBuf = ByteBuffer.wrap(array);
+        }
+        return (ByteBuffer) tmpNioBuf.clear().position(index).limit(index + length);
     }
 
     @Override
@@ -418,14 +422,6 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         byte[] copiedArray = new byte[length];
         System.arraycopy(array, index, copiedArray, 0, length);
         return new UnpooledHeapByteBuf(alloc(), copiedArray, maxCapacity());
-    }
-
-    private ByteBuffer internalNioBuffer() {
-        ByteBuffer tmpNioBuf = this.tmpNioBuf;
-        if (tmpNioBuf == null) {
-            this.tmpNioBuf = tmpNioBuf = ByteBuffer.wrap(array);
-        }
-        return tmpNioBuf;
     }
 
     @Override

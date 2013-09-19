@@ -298,8 +298,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
                     "dstIndex: %d, length: %d (expected: range(0, %d))", dstIndex, length, dst.length));
         }
 
-        ByteBuffer tmpBuf = internalNioBuffer();
-        tmpBuf.clear().position(index).limit(index + length);
+        ByteBuffer tmpBuf = internalNioBuffer(index, length);
         tmpBuf.get(dst, dstIndex, length);
         readerIndex += length;
         return this;
@@ -327,8 +326,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         checkIndex(index);
 
         int bytesToCopy = Math.min(capacity() - index, length);
-        ByteBuffer tmpBuf = internalNioBuffer();
-        tmpBuf.clear().position(index).limit(index + bytesToCopy);
+        ByteBuffer tmpBuf = internalNioBuffer(index, bytesToCopy);
         dst.put(tmpBuf);
         readerIndex += length;
         return this;
@@ -416,8 +414,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
     @Override
     public ByteBuf setBytes(int index, byte[] src, int srcIndex, int length) {
         checkSrcIndex(index, length, srcIndex, src.length);
-        ByteBuffer tmpBuf = internalNioBuffer();
-        tmpBuf.clear().position(index).limit(index + length);
+        ByteBuffer tmpBuf = internalNioBuffer(index, length);
         tmpBuf.put(src, srcIndex, length);
         return this;
     }
@@ -425,12 +422,12 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
     @Override
     public ByteBuf setBytes(int index, ByteBuffer src) {
         ensureAccessible();
-        ByteBuffer tmpBuf = internalNioBuffer();
+        ByteBuffer tmpBuf = internalNioBuffer(index, src.remaining());
         if (src == tmpBuf) {
+            // TODO: Shouldn't this be src.slice() ?
             src = src.duplicate();
         }
 
-        tmpBuf.clear().position(index).limit(index + src.remaining());
         tmpBuf.put(src);
         return this;
     }
@@ -467,8 +464,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             out.write(buffer.array(), index + buffer.arrayOffset(), length);
         } else {
             byte[] tmp = new byte[length];
-            ByteBuffer tmpBuf = internalNioBuffer();
-            tmpBuf.clear().position(index);
+            ByteBuffer tmpBuf = internalNioBuffer(index, length);
             tmpBuf.get(tmp);
             out.write(tmp);
         }
@@ -490,15 +486,14 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public int readBytes(GatheringByteChannel out, int length) throws IOException {
-        checkReadableBytes(length);
         ensureAccessible();
         if (length == 0) {
             return 0;
         }
+        checkReadableBytes(length);
 
         int index = readerIndex();
-        ByteBuffer tmpBuf = internalNioBuffer();
-        tmpBuf.clear().position(index).limit(index + length);
+        ByteBuffer tmpBuf = internalNioBuffer(index, length);
         int written = out.write(tmpBuf);
         readerIndex += written;
         return written;
@@ -515,8 +510,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             if (readBytes <= 0) {
                 return readBytes;
             }
-            ByteBuffer tmpNioBuf = internalNioBuffer();
-            tmpNioBuf.clear().position(index);
+            ByteBuffer tmpNioBuf = internalNioBuffer(index, length);
             tmpNioBuf.put(tmp, 0, readBytes);
             return readBytes;
         }
@@ -525,8 +519,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
         ensureAccessible();
-        ByteBuffer tmpNioBuf = internalNioBuffer();
-        tmpNioBuf.clear().position(index).limit(index + length);
+        ByteBuffer tmpNioBuf = internalNioBuffer(index, length);
         try {
             return in.read(tmpNioBuf);
         } catch (ClosedChannelException e) {
@@ -564,15 +557,11 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public ByteBuffer internalNioBuffer(int index, int length) {
-        return (ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length);
-    }
-
-    private ByteBuffer internalNioBuffer() {
         ByteBuffer tmpNioBuf = this.tmpNioBuf;
         if (tmpNioBuf == null) {
             this.tmpNioBuf = tmpNioBuf = buffer.duplicate();
         }
-        return tmpNioBuf;
+        return (ByteBuffer) tmpNioBuf.clear().position(index).limit(index + length);
     }
 
     @Override

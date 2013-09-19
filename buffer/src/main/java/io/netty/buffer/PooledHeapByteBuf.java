@@ -137,7 +137,7 @@ final class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
         checkReadableBytes(length);
         int readerIndex = readerIndex();
         int index = idx(readerIndex);
-        int readBytes = out.write((ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length));
+        int readBytes = out.write(internalNioBuffer(index, length));
         readerIndex += readBytes;
         this.readerIndex = readerIndex;
         return readBytes;
@@ -224,7 +224,7 @@ final class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
         checkIndex(index, length);
         index = idx(index);
         try {
-            return in.read((ByteBuffer) internalNioBuffer().clear().position(index).limit(index + length));
+            return in.read(internalNioBuffer(index, length));
         } catch (ClosedChannelException e) {
             return -1;
         }

@@ -164,9 +164,8 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         int index = readerIndex();
         checkIndex(index);
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        ByteBuffer tmpBuf = internalNioBuffer();
         index = idx(index);
-        tmpBuf.clear().position(index).limit(index + bytesToCopy);
+        ByteBuffer tmpBuf = internalNioBuffer(index, bytesToCopy);
         dst.put(tmpBuf);
         readerIndex += length;
         return this;
@@ -205,9 +204,8 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
             return 0;
         }
 
-        ByteBuffer tmpBuf = internalNioBuffer();
         index = idx(index);
-        tmpBuf.clear().position(index).limit(index + length);
+        ByteBuffer tmpBuf = internalNioBuffer(index, length);
         int written = out.write(tmpBuf);
         readerIndex += written;
         return written;
@@ -275,13 +273,12 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     @Override
     public ByteBuf setBytes(int index, ByteBuffer src) {
         checkIndex(index);
-        ByteBuffer tmpBuf = internalNioBuffer();
+        index = idx(index);
+        ByteBuffer tmpBuf = internalNioBuffer(index, src.remaining());
         if (src == tmpBuf) {
             src = src.duplicate();
         }
 
-        index = idx(index);
-        tmpBuf.clear().position(index).limit(index + src.remaining());
         tmpBuf.put(src);
         return this;
     }
@@ -300,8 +297,8 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
         checkIndex(index, length);
-        ByteBuffer tmpNioBuf = internalNioBuffer();
         index = idx(index);
+        ByteBuffer tmpNioBuf = internalNioBuffer(index, length);
         tmpNioBuf.clear().position(index).limit(index + length);
         try {
             return in.read(tmpNioBuf);
