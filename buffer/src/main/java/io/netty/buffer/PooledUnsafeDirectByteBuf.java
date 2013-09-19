@@ -150,9 +150,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     public ByteBuf getBytes(int index, ByteBuffer dst) {
         checkIndex(index);
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        ByteBuffer tmpBuf = memory.duplicate();
-        index = idx(index);
-        tmpBuf.position(index).limit(index + bytesToCopy);
+        ByteBuffer tmpBuf = nioBuffer(index, bytesToCopy);
         dst.put(tmpBuf);
         return this;
     }
@@ -164,7 +162,6 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         int index = readerIndex();
         checkIndex(index);
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        index = idx(index);
         ByteBuffer tmpBuf = internalNioBuffer(index, bytesToCopy);
         dst.put(tmpBuf);
         readerIndex += length;
@@ -189,9 +186,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
             return 0;
         }
 
-        ByteBuffer tmpBuf = memory.duplicate();
-        index = idx(index);
-        tmpBuf.position(index).limit(index + length);
+        ByteBuffer tmpBuf = nioBuffer(index, length);
         return out.write(tmpBuf);
     }
 
@@ -204,7 +199,6 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
             return 0;
         }
 
-        index = idx(index);
         ByteBuffer tmpBuf = internalNioBuffer(index, length);
         int written = out.write(tmpBuf);
         readerIndex += written;
@@ -272,8 +266,6 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
 
     @Override
     public ByteBuf setBytes(int index, ByteBuffer src) {
-        checkIndex(index);
-        index = idx(index);
         ByteBuffer tmpBuf = internalNioBuffer(index, src.remaining());
         if (src == tmpBuf) {
             src = src.duplicate();
@@ -297,9 +289,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
         checkIndex(index, length);
-        index = idx(index);
         ByteBuffer tmpNioBuf = internalNioBuffer(index, length);
-        tmpNioBuf.clear().position(index).limit(index + length);
         try {
             return in.read(tmpNioBuf);
         } catch (ClosedChannelException e) {

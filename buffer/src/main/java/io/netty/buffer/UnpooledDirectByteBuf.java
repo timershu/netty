@@ -281,8 +281,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
                     "dstIndex: %d, length: %d (expected: range(0, %d))", dstIndex, length, dst.length));
         }
 
-        ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.clear().position(index).limit(index + length);
+        ByteBuffer tmpBuf = nioBuffer(index, length);
         tmpBuf.get(dst, dstIndex, length);
         return this;
     }
@@ -312,8 +311,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.position(index).limit(index + bytesToCopy);
+        ByteBuffer tmpBuf = nioBuffer(index, bytesToCopy);
         dst.put(tmpBuf);
         return this;
     }
@@ -443,8 +441,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             out.write(buffer.array(), index + buffer.arrayOffset(), length);
         } else {
             byte[] tmp = new byte[length];
-            ByteBuffer tmpBuf = buffer.duplicate();
-            tmpBuf.position(index);
+            ByteBuffer tmpBuf = nioBuffer(index, length);
             tmpBuf.get(tmp);
             out.write(tmp);
         }
@@ -479,8 +476,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             return 0;
         }
 
-        ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.position(index).limit(index + length);
+        ByteBuffer tmpBuf = nioBuffer(index, length);
         return out.write(tmpBuf);
     }
 
@@ -542,7 +538,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         ensureAccessible();
         ByteBuffer src;
         try {
-            src = (ByteBuffer) buffer.duplicate().position(index).limit(index + length);
+            src = nioBuffer(index, length);
         } catch (IllegalArgumentException e) {
             throw new IndexOutOfBoundsException("Too many bytes to read - Need " + (index + length));
         }

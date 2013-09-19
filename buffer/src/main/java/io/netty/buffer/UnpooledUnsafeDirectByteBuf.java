@@ -280,8 +280,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
         }
 
         int bytesToCopy = Math.min(capacity() - index, dst.remaining());
-        ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.position(index).limit(index + bytesToCopy);
+        ByteBuffer tmpBuf = nioBuffer(index, bytesToCopy);
         dst.put(tmpBuf);
         return this;
     }
@@ -390,8 +389,7 @@ public class UnpooledUnsafeDirectByteBuf extends AbstractReferenceCountedByteBuf
             return 0;
         }
 
-        ByteBuffer tmpBuf = buffer.duplicate();
-        tmpBuf.position(index).limit(index + length);
+        ByteBuffer tmpBuf = nioBuffer(index, length);
         return out.write(tmpBuf);
     }
 
