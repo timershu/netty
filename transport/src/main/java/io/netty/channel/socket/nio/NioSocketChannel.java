@@ -16,6 +16,7 @@
 package io.netty.channel.socket.nio;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelFuture;
@@ -215,8 +216,13 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
             ByteBuffer nioBuf = buf.internalNioBuffer(buf.readerIndex(), buf.readableBytes());
             written = javaChannel().write(nioBuf);
         } else {
-            ByteBuffer nioBuf = buf.nioBuffer();
-            written = (int) javaChannel().write(nioBuf);
+            if (buf instanceof CompositeByteBuf) {
+                ByteBuffer nioBuf = buf.nioBuffer();
+                written = (int) javaChannel().write(nioBuf);
+            } else {
+                ByteBuffer[] nioBuf = buf.nioBuffers();
+                written = (int) javaChannel().write(nioBuf);
+            }
         }
         if (written > 0) {
             buf.readerIndex(buf.readerIndex() + written);
