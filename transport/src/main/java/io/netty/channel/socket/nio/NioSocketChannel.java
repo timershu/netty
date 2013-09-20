@@ -258,7 +258,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         for (;;) {
             // Do non-gathering write for a single buffer case.
             final int msgCount = in.size();
-            if (msgCount <= 1) {
+            if (msgCount < Integer.MAX_VALUE) {
                 super.doWrite(in);
                 return;
             }
