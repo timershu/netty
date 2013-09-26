@@ -33,7 +33,7 @@ import java.nio.channels.ScatteringByteChannel;
 public class SlicedByteBuf extends AbstractDerivedByteBuf {
 
     private final ByteBuf buffer;
-    private final int adjustment;
+    final int adjustment;
     private final int length;
 
     public SlicedByteBuf(ByteBuf buffer, int index, int length) {

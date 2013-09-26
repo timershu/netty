@@ -790,6 +790,79 @@ public abstract class AbstractCompositeByteBufTest extends AbstractByteBufTest {
 
         buf.addComponent(buffer().writeByte(1));
         assertFalse(buf.isDirect());
+    }
 
+    @Test
+    public void testNestedLayoutFlattenNonReadable() {
+        CompositeByteBuf buf = freeLater(compositeBuffer());
+        buf.addComponent(
+                compositeBuffer()
+                        .addComponent(wrappedBuffer(new byte[]{1, 2}))
+                        .addComponent(wrappedBuffer(new byte[]{3, 4})).slice(1, 2));
+
+        assertEquals(1, buf.numComponents());
+
+        assertEquals(2, buf.flatten().numComponents());
+        assertEquals(0, buf.readableBytes());
+    }
+
+    @Test
+    public void testNestedLayoutFlatten() {
+        CompositeByteBuf buf = freeLater(compositeBuffer());
+        buf.addComponent(
+                compositeBuffer()
+                        .addComponent(wrappedBuffer(new byte[]{1, 2}))
+                        .addComponent(wrappedBuffer(new byte[]{3, 4})).slice(1, 2));
+
+        // update writer index to 2
+        buf.writerIndex(2);
+        assertEquals(1, buf.numComponents());
+
+        assertEquals(2, buf.flatten().numComponents());
+        assertEquals(2, buf.readableBytes());
+        ByteBuffer[] nioBuffers = buf.nioBuffers(0, 2);
+        assertThat(nioBuffers.length, is(2));
+        assertThat(nioBuffers[0].remaining(), is(1));
+        assertThat(nioBuffers[0].get(), is((byte) 2));
+        assertThat(nioBuffers[1].remaining(), is(1));
+        assertThat(nioBuffers[1].get(), is((byte) 3));
+    }
+
+    @Test
+    public void testNestedLayoutFlattenMixed() {
+        CompositeByteBuf buf = freeLater(compositeBuffer());
+        buf.addComponent(
+                compositeBuffer()
+                        .addComponent(wrappedBuffer(new byte[]{1, 2}))
+                        .addComponent(wrappedBuffer(new byte[]{3, 4})).slice(1, 2));
+        buf.addComponent(wrappedBuffer(new byte[] {5, 6}));
+
+        // update writer index to 2
+        buf.writerIndex(2);
+        assertEquals(2, buf.numComponents());
+
+        assertEquals(3, buf.flatten().numComponents());
+        assertEquals(2, buf.readableBytes());
+        ByteBuffer[] nioBuffers = buf.nioBuffers(0, 2);
+        assertThat(nioBuffers.length, is(2));
+        assertThat(nioBuffers[0].remaining(), is(1));
+        assertThat(nioBuffers[0].get(), is((byte) 2));
+        assertThat(nioBuffers[1].remaining(), is(1));
+        assertThat(nioBuffers[1].get(), is((byte) 3));
+    }
+
+    @Test
+    public void testNonNestedLayoutFlatten() {
+        CompositeByteBuf buf = freeLater(compositeBuffer());
+        buf.addComponent(wrappedBuffer(new byte[]{1, 2}))
+                        .addComponent(wrappedBuffer(new byte[]{3, 4}));
+        buf.addComponent(wrappedBuffer(new byte[] {5, 6}));
+
+        // update writer index to 2
+        buf.writerIndex(2);
+        assertEquals(3, buf.numComponents());
+
+        assertEquals(3, buf.flatten().numComponents());
+        assertEquals(2, buf.readableBytes());
     }
 }

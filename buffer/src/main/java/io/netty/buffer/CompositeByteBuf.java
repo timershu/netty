@@ -1582,6 +1582,73 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
         return discardReadComponents();
     }
 
+    /**
+     * Flatten this {@link CompositeByteBuf} which means any nested {@link CompositeByteBuf} are merged.
+     */
+    public CompositeByteBuf flatten() {
+        int index = 0;
+        for (;;) {
+            int size = components.size();
+            ByteBuf unwrapped = null;
+            int readerIndex = 0;
+            int readableBytes = 0;
+            for (; index < size; index++) {
+                ByteBuf buf = components.get(index).buf;
+                // all the added ByteBuf was added by calling slice() on the ByteBuf before so unwrap it to get
+                // the real buffer. This is good enough as we never nest SlicedByteBuf or DuplicatedByteBuf
+                unwrapped = buf.unwrap();
+                if (unwrapped instanceof CompositeByteBuf) {
+                    readableBytes = buf.readableBytes();
+                    readerIndex = buf.readerIndex();
+                    if (buf instanceof SlicedByteBuf) {
+                        // its a SlicedByteBuf so we need to respect the adjustment that was used when creating it
+                        readerIndex += ((SlicedByteBuf) buf).adjustment;
+                    }
+                    break;
+                }
+            }
+            if (index == -1 || index == size || unwrapped == null) {
+                break;
+            }
+            // remove but not free it as the whole composite will be released once we flatten everything
+            components.remove(index);
+
+            updateComponentOffsets(index);
+
+            CompositeByteBuf compBuf = ((CompositeByteBuf) unwrapped).flatten();
+            int componentId = compBuf.toComponentIndex(readerIndex);
+
+            // The first component
+            Component firstC = compBuf.components.get(componentId);
+            ByteBuf first = firstC.buf;
+            first.readerIndex(readerIndex - firstC.offset);
+
+            ByteBuf buf = first;
+            int bytesToSlice = readableBytes;
+            do {
+                int readable = buf.readableBytes();
+                if (bytesToSlice <= readable) {
+                    // Last component
+                    buf.writerIndex(buf.readerIndex() + bytesToSlice);
+                    addComponent0(index++, buf.retain());
+                    break;
+                } else {
+                    // Not the last component
+                    addComponent0(index++, buf.retain());
+                    bytesToSlice -= readable;
+                    componentId ++;
+
+                    // Fetch the next component.
+                    buf = compBuf.components.get(componentId).buf;
+                }
+            } while (bytesToSlice > 0);
+
+            // release the flatten buffer
+            compBuf.release();
+        }
+        return this;
+    }
+
     @Override
     protected void deallocate() {
         if (freed) {
