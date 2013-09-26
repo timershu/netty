@@ -22,6 +22,7 @@ package io.netty.channel;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.Recycler;
 import io.netty.util.Recycler.Handle;
@@ -361,6 +362,13 @@ public final class ChannelOutboundBuffer {
                         nioBufferCount = fillBufferArray(nioBufs, nioBuffers, nioBufferCount);
                     }
                 } else {
+                    if (buf instanceof CompositeByteBuf) {
+                        CompositeByteBuf comp = (CompositeByteBuf)  buf;
+                        flattenComposite(comp, alloc);
+                        // cached ByteBuffers as they may be expensive to create in terms of Object allocation
+                        ByteBuffer[] nioBufs = entry.buffers = buf.nioBuffers();
+                        nioBufferCount = fillBufferArray(nioBufs, nioBuffers, nioBufferCount);
+                    }
                     nioBufferCount = fillBufferArrayNonDirect(entry, buf, readerIndex,
                             readableBytes, alloc, nioBuffers, nioBufferCount);
                 }
@@ -371,6 +379,20 @@ public final class ChannelOutboundBuffer {
         this.nioBufferSize = nioBufferSize;
 
         return nioBuffers;
+    }
+
+    private static void flattenComposite(CompositeByteBuf comp, ByteBufAllocator alloc) {
+        int components = comp.flatten().numComponents();
+        for (int a = 0 ; a < components; a++) {
+            ByteBuf b = comp.internalComponent(a);
+            if (b.isDirect()) {
+                continue;
+            }
+
+            ByteBuf directBuf = alloc.directBuffer(b.readableBytes());
+            directBuf.writeBytes(b);
+            comp.internalReplaceComponent(a, directBuf);
+        }
     }
 
     private static int fillBufferArray(ByteBuffer[] nioBufs, ByteBuffer[] nioBuffers, int nioBufferCount) {

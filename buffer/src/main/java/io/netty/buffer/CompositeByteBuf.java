@@ -1074,6 +1074,24 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
         return findComponent(offset).buf;
     }
 
+    /**
+     * Allow to replace one component with another. Both components must have the same readable bytes and the replaced
+     * one will be released. This is for internal usage only.
+     */
+    public CompositeByteBuf internalReplaceComponent(int cIndex, ByteBuf buffer) {
+        checkComponentIndex(cIndex);
+
+        Component comp = components.get(cIndex);
+        ByteBuf buf = comp.buf;
+        if (buf.readableBytes() != buffer.readableBytes()) {
+            throw new IllegalArgumentException("Can only replace buffers with same readable bytes");
+        }
+
+        buf.release();
+        comp.buf = buffer;
+        return this;
+    }
+
     private Component findComponent(int offset) {
         assert !freed;
         checkIndex(offset);
@@ -1326,7 +1344,7 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     private final class Component {
-        final ByteBuf buf;
+        ByteBuf buf;
         final int length;
         int offset;
         int endOffset;
