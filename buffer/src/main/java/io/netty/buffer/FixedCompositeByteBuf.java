@@ -16,6 +16,7 @@
 package io.netty.buffer;
 
 import io.netty.util.internal.EmptyArrays;
+import io.netty.util.internal.RecyclableArrayList;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,11 +26,12 @@ import java.nio.ByteOrder;
 import java.nio.ReadOnlyBufferException;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 
-
+/**
+ * {@link ByteBuf} implementation which allows to wrap an array of {@link ByteBuf} in a read-only mode.
+ * This is useful to write an array of {@link ByteBuf}s.
+ */
 final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     private final int nioBufferCount;
     private final int capacity;
@@ -411,34 +413,37 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             return EmptyArrays.EMPTY_BYTE_BUFFERS;
         }
 
-        List<ByteBuffer> array = new ArrayList<ByteBuffer>(buffers.length);
-        int a = 0;
-        Component c = findComponent(index);
-        int i = c.index;
-        int adjustment = c.offset;
-        ByteBuf s = c.buf;
-        for (;;) {
-            int localLength = Math.min(length, s.capacity() - (index - adjustment));
-            switch (s.nioBufferCount()) {
-                case 0:
-                    throw new UnsupportedOperationException();
-                case 1:
-                    array.add(s.nioBuffer(index - adjustment, localLength));
+        RecyclableArrayList array = RecyclableArrayList.newInstance(buffers.length);
+        try {
+            Component c = findComponent(index);
+            int i = c.index;
+            int adjustment = c.offset;
+            ByteBuf s = c.buf;
+            for (;;) {
+                int localLength = Math.min(length, s.capacity() - (index - adjustment));
+                switch (s.nioBufferCount()) {
+                    case 0:
+                        throw new UnsupportedOperationException();
+                    case 1:
+                        array.add(s.nioBuffer(index - adjustment, localLength));
+                        break;
+                    default:
+                        Collections.addAll(array, s.nioBuffers(index - adjustment, localLength));
+                }
+
+                index += localLength;
+                length -= localLength;
+                adjustment += s.readableBytes();
+                if (length <= 0) {
                     break;
-                default:
-                    Collections.addAll(array, s.nioBuffers(index - adjustment, localLength));
+                }
+                s = buffers[++i];
             }
 
-            index += localLength;
-            length -= localLength;
-            adjustment += s.readableBytes();
-            if (length <= 0) {
-                break;
-            }
-            s = buffers[++i];
+            return array.toArray(new ByteBuffer[array.size()]);
+        } finally {
+            array.recycle();
         }
-
-        return array.toArray(new ByteBuffer[array.size()]);
     }
 
     @Override
