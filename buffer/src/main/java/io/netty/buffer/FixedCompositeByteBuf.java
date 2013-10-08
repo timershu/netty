@@ -430,10 +430,11 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public ByteBuf copy(int index, int length) {
+        checkIndex(index, length);
         boolean release = true;
-        ByteBuf buf = alloc().buffer(index, length);
+        ByteBuf buf = alloc().buffer(length);
         try {
-            buf.writeBytes(this);
+            buf.writeBytes(this, index, length);
             release = false;
             return buf;
         } finally {
