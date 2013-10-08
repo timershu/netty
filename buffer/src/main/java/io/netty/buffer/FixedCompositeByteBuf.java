@@ -550,7 +550,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
         }
     }
 
-
     @Override
     public String toString() {
         String result = super.toString();
