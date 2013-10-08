@@ -33,23 +33,26 @@ import java.util.Collections;
  * This is useful to write an array of {@link ByteBuf}s.
  */
 final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
+    private static final ByteBuf[] EMPTY = new ByteBuf[] {Unpooled.EMPTY_BUFFER};
     private final int nioBufferCount;
     private final int capacity;
     private final ByteBufAllocator allocator;
     private final ByteOrder order;
-    private final ByteBuf[] buffers;
+    private final Object[] buffers;
     private final boolean direct;
 
     public FixedCompositeByteBuf(ByteBufAllocator allocator, ByteBuf... buffers) {
         super(Integer.MAX_VALUE);
         if (buffers.length == 0) {
+            this.buffers = EMPTY;
             order = ByteOrder.BIG_ENDIAN;
-            this.buffers = new ByteBuf[] {new EmptyByteBuf(allocator)};
             nioBufferCount = 1;
             capacity = 0;
             direct = buffers[0].isDirect();
         } else {
             ByteBuf b = buffers[0];
+            this.buffers = new Object[buffers.length];
+            this.buffers[0] = b;
             boolean direct = true;
             int nioBufferCount = b.nioBufferCount();
             int capacity = b.readableBytes();
@@ -64,18 +67,58 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
                 if (!b.isDirect()) {
                     direct = false;
                 }
+                this.buffers[i] = b;
             }
             this.nioBufferCount = nioBufferCount;
             this.capacity = capacity;
             this.direct = direct;
-            this.buffers = buffers.clone();
         }
         setIndex(0, capacity());
         this.allocator = allocator;
     }
 
     @Override
+    public boolean isWritable() {
+        return false;
+    }
+
+    @Override
+    public boolean isWritable(int size) {
+        return false;
+    }
+
+    @Override
+    public ByteBuf discardReadBytes() {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public ByteBuf setBytes(int index, ByteBuf src, int srcIndex, int length) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public ByteBuf setBytes(int index, byte[] src, int srcIndex, int length) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public ByteBuf setBytes(int index, ByteBuffer src) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public ByteBuf setByte(int index, int value) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
     protected void _setByte(int index, int value) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public ByteBuf setShort(int index, int value) {
         throw new ReadOnlyBufferException();
     }
 
@@ -85,7 +128,17 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
+    public ByteBuf setMedium(int index, int value) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
     protected void _setMedium(int index, int value) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public ByteBuf setInt(int index, int value) {
         throw new ReadOnlyBufferException();
     }
 
@@ -95,7 +148,22 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
+    public ByteBuf setLong(int index, long value) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
     protected void _setLong(int index, long value) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public int setBytes(int index, InputStream in, int length) {
+        throw new ReadOnlyBufferException();
+    }
+
+    @Override
+    public int setBytes(int index, ScatteringByteChannel in, int length) {
         throw new ReadOnlyBufferException();
     }
 
@@ -134,42 +202,45 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
         return direct;
     }
 
-    @Override
-    public ByteBuf setBytes(int index, ByteBuf src, int srcIndex, int length) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public ByteBuf setBytes(int index, byte[] src, int srcIndex, int length) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public ByteBuf setBytes(int index, ByteBuffer src) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public int setBytes(int index, InputStream in, int length) throws IOException {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
-        throw new ReadOnlyBufferException();
-    }
-
     private Component findComponent(int index) {
         int readable = 0;
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0 ; i < buffers.length; i++) {
-            ByteBuf b = buffers[i];
+            Component comp = null;
+            ByteBuf b;
+            Object obj = buffers[i];
+            boolean isBuffer;
+            if (obj instanceof ByteBuf) {
+                b = (ByteBuf) obj;
+                isBuffer = true;
+            } else {
+                comp = (Component) obj;
+                b = comp.buf;
+                isBuffer = false;
+            }
             readable += b.readableBytes();
             if (index < readable) {
-                return new Component(i, readable - b.readableBytes(), b);
+                if (isBuffer) {
+                    // Create a new component ad store ti in the array so it not create a new object
+                    // on the next access.
+                    comp = new Component(i, readable - b.readableBytes(), b);
+                    buffers[i] = comp;
+                }
+                return comp;
             }
         }
         throw new IllegalStateException();
+    }
+
+    /**
+     * Return the {@link ByteBuf} stored at the given index of the array.
+     */
+    private ByteBuf buffer(int i) {
+        Object obj = buffers[i];
+        if (obj instanceof ByteBuf) {
+            return (ByteBuf) obj;
+        }
+        return ((Component) obj).buf;
     }
 
     @Override
@@ -252,7 +323,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             if (length <= 0) {
                 break;
             }
-            s = buffers[++i];
+            s = buffer(++i);
         }
         return this;
     }
@@ -282,7 +353,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
                 if (length <= 0) {
                     break;
                 }
-                s = buffers[++i];
+                s = buffer(++i);
             }
         } finally {
             dst.limit(limit);
@@ -311,7 +382,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             if (length <= 0) {
                 break;
             }
-            s = buffers[++i];
+            s = buffer(++i);
         }
         return this;
     }
@@ -352,7 +423,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             if (length <= 0) {
                 break;
             }
-            s = buffers[++i];
+            s = buffer(++i);
         }
         return this;
     }
@@ -381,7 +452,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     public ByteBuffer nioBuffer(int index, int length) {
         checkIndex(index, length);
         if (buffers.length == 1) {
-            ByteBuf buf = buffers[0];
+            ByteBuf buf = buffer(0);
             if (buf.nioBufferCount() == 1) {
                 return buf.nioBuffer(index, length);
             }
@@ -401,7 +472,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     @Override
     public ByteBuffer internalNioBuffer(int index, int length) {
         if (buffers.length == 1) {
-            return buffers[0].internalNioBuffer(index, length);
+            return buffer(0).internalNioBuffer(index, length);
         }
         throw new UnsupportedOperationException();
     }
@@ -437,7 +508,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
                 if (length <= 0) {
                     break;
                 }
-                s = buffers[++i];
+                s = buffer(++i);
             }
 
             return array.toArray(new ByteBuffer[array.size()]);
@@ -475,8 +546,16 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     protected void deallocate() {
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0; i < buffers.length; i++) {
-             buffers[i].release();
+             buffer(i).release();
         }
+    }
+
+
+    @Override
+    public String toString() {
+        String result = super.toString();
+        result = result.substring(0, result.length() - 1);
+        return result + ", components=" + buffers.length + ')';
     }
 
     private static final class Component {
