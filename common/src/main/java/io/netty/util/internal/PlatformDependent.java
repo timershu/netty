@@ -236,6 +236,13 @@ public final class PlatformDependent {
         }
     }
 
+    public static ByteBuffer allocateDirectBuffer(int capacity, boolean tryAlign) {
+        if (tryAlign && hasUnsafe()) {
+            return PlatformDependent0.allocateAlignedDirectBuffer(capacity);
+        }
+        return ByteBuffer.allocate(capacity);
+    }
+
     public static long directBufferAddress(ByteBuffer buffer) {
         return PlatformDependent0.directBufferAddress(buffer);
     }

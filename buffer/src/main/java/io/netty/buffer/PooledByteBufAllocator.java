@@ -128,14 +128,24 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator {
     }
 
     public PooledByteBufAllocator(boolean preferDirect) {
-        this(preferDirect, DEFAULT_NUM_HEAP_ARENA, DEFAULT_NUM_DIRECT_ARENA, DEFAULT_PAGE_SIZE, DEFAULT_MAX_ORDER);
+        this(preferDirect, false);
+    }
+
+    public PooledByteBufAllocator(boolean preferDirect, boolean tryAlign) {
+        this(preferDirect, DEFAULT_NUM_HEAP_ARENA, DEFAULT_NUM_DIRECT_ARENA, DEFAULT_PAGE_SIZE, DEFAULT_MAX_ORDER,
+                tryAlign);
     }
 
     public PooledByteBufAllocator(int nHeapArena, int nDirectArena, int pageSize, int maxOrder) {
-        this(false, nHeapArena, nDirectArena, pageSize, maxOrder);
+        this(false, nHeapArena, nDirectArena, pageSize, maxOrder, false);
     }
 
     public PooledByteBufAllocator(boolean preferDirect, int nHeapArena, int nDirectArena, int pageSize, int maxOrder) {
+        this(preferDirect, nHeapArena, nDirectArena, pageSize, maxOrder, false);
+    }
+
+    public PooledByteBufAllocator(boolean preferDirect, int nHeapArena, int nDirectArena, int pageSize,
+                                  int maxOrder, boolean tryAlign) {
         super(preferDirect);
 
         final int chunkSize = validateAndCalculateChunkSize(pageSize, maxOrder);
@@ -161,7 +171,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator {
         if (nDirectArena > 0) {
             directArenas = newArenaArray(nDirectArena);
             for (int i = 0; i < directArenas.length; i ++) {
-                directArenas[i] = new PoolArena.DirectArena(this, pageSize, maxOrder, pageShifts, chunkSize);
+                directArenas[i] = new PoolArena.DirectArena(this, pageSize, maxOrder, pageShifts, chunkSize, tryAlign);
             }
         } else {
             directArenas = null;

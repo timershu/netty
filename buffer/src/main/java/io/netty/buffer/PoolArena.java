@@ -370,15 +370,18 @@ abstract class PoolArena<T> {
     static final class DirectArena extends PoolArena<ByteBuffer> {
 
         private static final boolean HAS_UNSAFE = PlatformDependent.hasUnsafe();
-
-        DirectArena(PooledByteBufAllocator parent, int pageSize, int maxOrder, int pageShifts, int chunkSize) {
+        private final boolean tryAlign;
+        DirectArena(PooledByteBufAllocator parent, int pageSize, int maxOrder, int pageShifts, int chunkSize,
+                    boolean tryAlign) {
             super(parent, pageSize, maxOrder, pageShifts, chunkSize);
+            this.tryAlign = tryAlign;
         }
 
         @Override
         protected PoolChunk<ByteBuffer> newChunk(int pageSize, int maxOrder, int pageShifts, int chunkSize) {
             return new PoolChunk<ByteBuffer>(
-                    this, ByteBuffer.allocateDirect(chunkSize), pageSize, maxOrder, pageShifts, chunkSize);
+                    this, PlatformDependent.allocateDirectBuffer(chunkSize, tryAlign), pageSize, maxOrder,
+                    pageShifts, chunkSize);
         }
 
         @Override

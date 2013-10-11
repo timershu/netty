@@ -38,6 +38,7 @@ final class PlatformDependent0 {
     private static final long CLEANER_FIELD_OFFSET;
     private static final long ADDRESS_FIELD_OFFSET;
     private static final Field CLEANER_FIELD;
+    private static final int PAGE_SIZE;
 
     /**
      * {@code true} if and only if the platform supports unaligned access.
@@ -117,10 +118,11 @@ final class PlatformDependent0 {
             CLEANER_FIELD_OFFSET = -1;
             ADDRESS_FIELD_OFFSET = -1;
             UNALIGNED = false;
+            PAGE_SIZE = -1;
         } else {
             ADDRESS_FIELD_OFFSET = objectFieldOffset(addressField);
             CLEANER_FIELD_OFFSET = objectFieldOffset(cleanerField);
-
+            PAGE_SIZE = UNSAFE.pageSize();
             boolean unaligned;
             try {
                 Class<?> bitsClass = Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
@@ -317,6 +319,33 @@ final class PlatformDependent0 {
 
     static void copyMemory(Object src, long srcOffset, Object dst, long dstOffset, long length) {
         UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, length);
+    }
+
+    // This is mainly a copy of the code found here:
+    // http://psy-lob-saw.blogspot.co.nz/2013/01/direct-memory-alignment-in-java.html
+    static ByteBuffer allocateAlignedDirectBuffer(int capacity) {
+        // We over allocate by the alignment so we know we can have a large enough aligned
+        // block of memory to use.
+        ByteBuffer buffy = ByteBuffer.allocateDirect((int) (capacity + PAGE_SIZE));
+        long address = getLong(buffy, ADDRESS_FIELD_OFFSET);
+        // check if we got lucky and the address is already aligned
+        if ((address & (PAGE_SIZE - 1)) == 0) {
+            // set the new limit to intended capacity
+            buffy.limit(capacity);
+            // the slice is now an aligned buffer of the required capacity
+            return buffy.slice();
+        } else {
+            // we need to shift the start position to an aligned address --> address + (align - (address % align))
+            // the modulo replacement with the & trick is valid for power of 2 values only
+            int newPosition = (int) (PAGE_SIZE - (address & (PAGE_SIZE - 1)));
+            // change the position
+            buffy.position(newPosition);
+            int newLimit = newPosition + capacity;
+            // set the new limit to accomodate offset + intended capacity
+            buffy.limit(newLimit);
+            // the slice is now an aligned buffer of the required capacity
+            return buffy.slice();
+        }
     }
 
     private PlatformDependent0() {
