@@ -89,13 +89,6 @@ import java.util.Arrays;
  * 1) Compute d = log_2(chunkSize/size)
  * 2) Return allocateNode(d)
  *
- * Algorithm: [allocateSubpage(size)]
- * ----------
- * All subpages allocated are stored in a map at key = elemSize
- * 1) if subpage at elemSize != null: try allocating from it.
- *      if it fails: allocateNewSubpage
- * 2) else: just allocateNewSubpage
- *
  * Algorithm: [allocateNewSubpage(size)]
  * ----------
  * 1) use allocateRun(maxOrder) to find an empty (i.e., unused) leaf (i.e., page)
@@ -122,8 +115,9 @@ final class PoolChunk<T> {
     private static final int INT_LENGTH = 32;
     private static final long LOWER_INT_MASK = 0xFFFFFFFFL;
     private static final long UPPER_INT_MASK = ~LOWER_INT_MASK;
-    private static final long UNAVAILABLE = (LOWER_INT_MASK << INT_LENGTH) |
-        LOWER_INT_MASK;
+    private static final long UNAVAILABLE = (LOWER_INT_MASK << INT_LENGTH) | LOWER_INT_MASK;
+    private static final long NULLPTR = Integer.MAX_VALUE;
+    private static final long SINGLE = (NULLPTR << INT_LENGTH) | NULLPTR;
 
     final PoolArena<T> arena;
     final T memory;
@@ -131,9 +125,9 @@ final class PoolChunk<T> {
 
     private final short[] memoryMap;
     private final PoolSubpage<T>[] subpages;
-    private final long[] availList;
-    private final boolean[] inAvailList;
+    private final long[] availLists;
     private final IntObjectHashMap<PoolSubpage<T>> elemSubpages;
+    // TODO - replace with intlong primitive map when available to avoid creating Long objects unnecessarily
     private final IntObjectHashMap<Long> availListIndex;
     /** Used to determine if the requested capacity is equal to or greater than pageSize. */
     private final int subpageOverflowMask;
@@ -165,7 +159,7 @@ final class PoolChunk<T> {
         this.maxOrder = maxOrder;
         this.chunkSize = chunkSize;
         unusable = (byte) (maxOrder + 1);
-        log2ChunkSize = Integer.SIZE - 1 - Integer.numberOfLeadingZeros(chunkSize);
+        log2ChunkSize = log2(chunkSize);
         subpageOverflowMask = ~(pageSize - 1);
         freeBytes = chunkSize;
 
@@ -186,8 +180,7 @@ final class PoolChunk<T> {
         }
 
         subpages = newSubpageArray(maxSubpageAllocs);
-        availList = newAvailList(maxSubpageAllocs);
-        inAvailList = new boolean[maxSubpageAllocs];
+        availLists = newAvailList(maxSubpageAllocs);
         elemSubpages = new IntObjectHashMap<PoolSubpage<T>>(pageShifts + 512);
         availListIndex = new IntObjectHashMap<Long>(pageShifts + 512);
     }
@@ -200,8 +193,7 @@ final class PoolChunk<T> {
         memoryMap = null;
         subpages = null;
         elemSubpages = null;
-        availList = null;
-        inAvailList = null;
+        availLists = null;
         availListIndex = null;
         subpageOverflowMask = 0;
         pageSize = 0;
@@ -209,7 +201,7 @@ final class PoolChunk<T> {
         maxOrder = 0;
         unusable = (byte) (maxOrder + 1);
         chunkSize = size;
-        log2ChunkSize = Integer.SIZE - 1 - Integer.numberOfLeadingZeros(chunkSize);
+        log2ChunkSize = log2(chunkSize);
         maxSubpageAllocs = 0;
     }
 
@@ -220,7 +212,7 @@ final class PoolChunk<T> {
 
     private long[] newAvailList(int size) {
         long[] array = new long[size];
-        Arrays.fill(array, -1);
+        Arrays.fill(array, UNAVAILABLE);
         return array;
     }
 
@@ -300,14 +292,14 @@ final class PoolChunk<T> {
                 mem = value(id);
             }
         }
-        setVal(id, unusable); // mark as unusable : because, maximum input d = maxOrder
+        setVal(id, unusable); // mark as unusable
         updateParentsAlloc(id);
         return id;
     }
 
     private long allocateRun(int normCapacity) {
         int numPages = normCapacity >>> pageShifts;
-        int d = maxOrder - (Integer.SIZE - 1 - Integer.numberOfLeadingZeros(numPages));
+        int d = maxOrder - log2(numPages);
         int id = allocateNode(d);
         if (id < 0) {
             return id;
@@ -342,17 +334,12 @@ final class PoolChunk<T> {
         PoolSubpage<T> subpage = subpages[head];
         assert normCapacity == subpage.elemSize;
         long handle = subpage.allocate();
-        if (handle > 0) { // head has free slots
-            removeNode(normCapacity, head); // remove head from availList
-            elemSubpages.put(normCapacity, subpage); // store in elemSubpages
-            return handle;
-        }
 
         int pos = head;
         while (handle <= 0) {
-            pos = removeNode(normCapacity, pos);
+            pos = removeHead(normCapacity, pos);
 
-            if (pos == LOWER_INT_MASK) {
+            if (pos == NULLPTR) {
                 break;
             }
             subpage = subpages[pos];
@@ -360,6 +347,7 @@ final class PoolChunk<T> {
             handle = subpage.allocate();
         }
         if (handle > 0) {
+            removeHead(normCapacity, pos);
             elemSubpages.put(normCapacity, subpage);
             return handle;
         }
@@ -395,13 +383,13 @@ final class PoolChunk<T> {
             assert subpage != null && subpage.doNotDestroy;
             int normCapacity = subpage.elemSize;
             if (subpage.free(bitmapIdx & 0x3FFFFFFF)) {
-                if (!inAvailList[subpageId]) { // if not in availList add to it
-                    addNode(normCapacity, subpageId);
+                if (availLists[subpageId] == UNAVAILABLE) { // if not in availLists add to it
+                    addTail(normCapacity, subpageId);
                 }
                 return;
             }
-            if (inAvailList[subpageId]) { // if present in availList remove from it
-                removeNode(normCapacity, subpageId);
+            if (availLists[subpageId] != UNAVAILABLE) { // if present in availLists remove from it
+                removeElement(normCapacity, subpageId);
             }
             if (elemSubpages.get(normCapacity) == subpage) { // if present in elemSubpages remove from it
               elemSubpages.put(normCapacity, null);
@@ -442,33 +430,69 @@ final class PoolChunk<T> {
             runOffset(memoryMapIdx) + (bitmapIdx & 0x3FFFFFFF) * subpage.elemSize, reqCapacity, subpage.elemSize);
     }
 
-    private void addNode(int normCapacity, int pos) {
+    private void addTail(int normCapacity, int pos) { // add node to tail of availLists
         long index = availListIndex.get(normCapacity);
-        inAvailList[pos] = true; // register presence in availList
         if (index == UNAVAILABLE) { // first node to be added so head = tail
-            availList[pos] = UNAVAILABLE; // prev = null, next = null at head/tail
+            availLists[pos] = SINGLE; // prev = null, next = null at head/tail
             availListIndex.put(normCapacity, setUpper(pos, pos));
         } else {
             int tail = (int) lower(index); // find tail
-            availList[tail] = setLower(availList[tail], pos); // set next = node pos
-            availList[pos] = setUpper(LOWER_INT_MASK, tail); // set prev = tail, next = null i.,e new tail
+            availLists[tail] = setLower(availLists[tail], pos); // set next = node pos
+            availLists[pos] = setUpper(NULLPTR, tail); // set prev = tail, next = null i.,e new tail
             availListIndex.put(normCapacity, setLower(index, pos)); // register new tail
         }
     }
 
-    private int removeNode(int normCapacity, int pos) {
-        long next = lower(availList[pos]);
-        availList[pos] = UNAVAILABLE; // set pos as unavailable
+    private int removeHead(int normCapacity, int pos) { // remove node from head of availLists
+        long val = availLists[pos];
+        assert isHead(val) : String.valueOf(val);
+
+        int next = (int) lower(val);
         long index = availListIndex.get(normCapacity);
-        if (upper(index) == lower(index)) {
-            // if this is the last node to be removed, register in map
+        if (val == SINGLE) { // if this is the last node to be removed, register in map
             availListIndex.put(normCapacity, UNAVAILABLE);
-        } else {
-            // update availListIndex head to next of cur head
+        } else { // update availListIndex head to next of cur head
+            availLists[next] = setUpper(availLists[next], NULLPTR); // next.prev = null
             availListIndex.put(normCapacity, setUpper(index, next));
         }
-        inAvailList[pos] = false; // register removal from availList
-        return (int) next;
+        availLists[pos] = UNAVAILABLE; // mark pos as unavailable
+        return next;
+    }
+
+    private int removeTail(int normCapacity, int pos) { // remove node from tail of availLists
+        long val = availLists[pos];
+        assert isTail(val) : String.valueOf(val);
+
+        int prev = (int) upper(val);
+        long index = availListIndex.get(normCapacity);
+        if (val == SINGLE) { // if this is the last node to be removed, register in map
+            availListIndex.put(normCapacity, UNAVAILABLE);
+        } else { // update availListIndex head to next of cur head
+            availLists[prev] = setLower(availLists[prev], NULLPTR); // prev.next = null
+            availListIndex.put(normCapacity, setLower(index, prev));
+        }
+        availLists[pos] = UNAVAILABLE; // mark pos as unavailable
+        return prev;
+    }
+
+    private void removeElement(int normCapacity, int pos) { // remove node from arbitrary position
+        long val = availLists[pos];
+        if (isHead(val)) {
+            removeHead(normCapacity, pos);
+            return;
+        } else if (isTail(val)) {
+            removeTail(normCapacity, pos);
+            return;
+        }
+
+        int prev = (int) upper(val);
+        int next = (int) lower(val);
+        assert prev != NULLPTR && next != NULLPTR : String.valueOf(val); // node is neither head nor tail
+        assert prev != LOWER_INT_MASK && next != LOWER_INT_MASK : String.valueOf(val);
+
+        availLists[prev] = setLower(availLists[prev], next); // prev.next = pos.next
+        availLists[next] = setUpper(availLists[next], prev); // next.prev = pos.prev
+        availLists[pos] = UNAVAILABLE; // pos = null
     }
 
     private long upper(long val) {
@@ -487,12 +511,12 @@ final class PoolChunk<T> {
         return (val & UPPER_INT_MASK) | lowerVal;
     }
 
-    private long maskUpper(long val) {
-        return setUpper(val, LOWER_INT_MASK);
+    private boolean isHead(long val) {
+        return upper(val) == NULLPTR;
     }
 
-    private long maskLower(long val) {
-        return setLower(val, LOWER_INT_MASK);
+    private boolean isTail(long val) {
+        return lower(val) == NULLPTR;
     }
 
     private byte value(int id) {
@@ -517,6 +541,10 @@ final class PoolChunk<T> {
         // represents the 0-based offset in #bytes from start of the byte-array chunk
         int shift = id ^ (1 << depth(id));
         return shift * runLength(id);
+    }
+
+    private int log2(int val) {
+        return Integer.SIZE - 1 - Integer.numberOfLeadingZeros(val);
     }
 
     private int subpageIdx(int memoryMapIdx) {
